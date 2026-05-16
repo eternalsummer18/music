@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ashley·声境 | 终极多维音乐可视化系统 (Hardcore Rhythm Edition)</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,500&display=swap');
+
+        :root {
+            --primary: #2563eb; --primary-hover: #3b82f6; 
+            --bg-glass: rgba(10, 15, 30, 0.85); --border-glass: rgba(59, 130, 246, 0.4); 
+            --text-main: #f8fafc; --text-muted: #94a3b8;
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+            background-color: #02040a; font-family: 'Segoe UI', system-ui, sans-serif;
+            color: var(--text-main); user-select: none;
+        }
+
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+
+        .title {
+            position: absolute; top: 40px; left: 50%; transform: translateX(-50%);
+            font-family: 'Playfair Display', serif; font-size: 40px; font-style: italic;
+            letter-spacing: 12px; color: rgba(255, 255, 255, 0.9);
+            text-shadow: 0 4px 25px rgba(37, 99, 235, 0.7); z-index: 10; pointer-events: none;
+        }
+
+        .control-panel {
+            position: absolute; top: 25px; right: 25px; width: 330px;
+            background: var(--bg-glass); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+            border: 1px solid var(--border-glass); border-radius: 16px; 
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), inset 0 0 20px rgba(37,99,235,0.1); 
+            z-index: 10; transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden;
+            display: flex; flex-direction: column;
+        }
+
+        .panel-header {
+            padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.3);
+        }
+        .panel-header h3 { margin: 0; font-size: 15px; letter-spacing: 2px; color: #60a5fa; font-weight: 500; }
+        .collapse-btn { cursor: pointer; color: #60a5fa; font-size: 20px; line-height: 1; transition: 0.3s; }
+        .collapse-btn:hover { color: #fff; transform: scale(1.1); }
+
+        .panel-content { padding: 20px; overflow-y: auto; max-height: calc(100vh - 120px); }
+        .panel-content::-webkit-scrollbar { width: 3px; }
+        .panel-content::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 2px; }
+
+        .btn {
+            background: rgba(30, 58, 138, 0.6); border: 1px solid var(--border-glass);
+            border-radius: 10px; color: #fff; padding: 12px; width: 100%;
+            font-size: 13px; cursor: pointer; transition: all 0.3s ease; text-align: center;
+            letter-spacing: 1px; margin-bottom: 15px; display: flex; justify-content: center; align-items: center; gap: 8px;
+        }
+        .btn:hover { background: rgba(37, 99, 235, 0.8); box-shadow: 0 0 20px rgba(37, 99, 235, 0.5); transform: translateY(-1px); }
+        
+        .control-group { margin-bottom: 16px; }
+        .control-group label { font-size: 12px; margin-bottom: 8px; color: var(--text-muted); display: flex; justify-content: space-between; }
+        .val-display { color: #93c5fd; font-weight: bold; }
+
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 12px; width: 12px; border-radius: 50%;
+            background: #60a5fa; cursor: pointer; margin-top: -4px; box-shadow: 0 0 8px #60a5fa; transition: 0.2s;
+        }
+        input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px; cursor: pointer; background: rgba(255, 255, 255, 0.15); border-radius: 2px;
+        }
+
+        .audio-controls {
+            background: rgba(0,0,0,0.4); border-radius: 12px; padding: 15px; margin-bottom: 15px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .play-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .play-btn {
+            width: 38px; height: 38px; border-radius: 50%; background: var(--primary); border: none;
+            color: #fff; font-size: 16px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: 0.3s;
+        }
+        .play-btn:hover { transform: scale(1.1); box-shadow: 0 0 15px var(--primary); }
+        .time-display { font-size: 12px; color: var(--text-muted); font-family: monospace; }
+        
+        #status-text { font-size: 11px; color: #34d399; margin-top: 5px; text-align: center; margin-bottom: 15px; }
+        #model-status { font-size: 11px; color: #a78bfa; text-align: center; margin-bottom: 15px; }
+        #camera-status { font-size: 11px; color: #fbbf24; text-align: center; margin-top: 8px; display: none; }
+
+        .fullscreen-btn {
+            position: absolute; bottom: 30px; right: 30px; width: 45px; height: 45px;
+            background: var(--bg-glass); border: 1px solid var(--border-glass); border-radius: 50%;
+            cursor: pointer; z-index: 10; display: flex; justify-content: center; align-items: center;
+            color: #60a5fa; font-size: 20px; transition: all 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        .fullscreen-btn:hover { background: var(--primary); color: #fff; transform: scale(1.1); }
+        
+        #file-input { width: 0.1px; height: 0.1px; opacity: 0; position: absolute; z-index: -1; }
+        #video-element { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="title">Ashley·声境</div>
+    <div id="canvas-container"></div>
+
+    <div class="control-panel" id="panel">
+        <div class="panel-header">
+            <h3>控制中枢</h3>
+            <div class="collapse-btn" id="collapse-btn" title="折叠/展开">−</div>
+        </div>
+        
+        <div class="panel-content" id="panel-content">
+            <button class="btn" id="upload-btn">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/></svg>
+                载入本地曲目
+            </button>
+            <input type="file" id="file-input" accept="audio/*">
+            <div id="status-text">系统就绪，等待音频注入...</div>
+            <div id="model-status">当前阵列：随机初始态</div>
+
+            <div class="audio-controls">
+                <div class="play-row">
+                    <button class="play-btn" id="play-pause-btn">▶</button>
+                    <div class="time-display"><span id="time-current">00:00</span> / <span id="time-total">00:00</span></div>
+                </div>
+                <div class="control-group">
+                    <input type="range" id="progress-slider" min="0" max="100" value="0" step="0.1">
+                </div>
+                <div class="control-group" style="margin-bottom:0;">
+                    <label>系统音量 <span id="val-vol" class="val-display">80%</span></label>
+                    <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="0.8">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>粒子基准色相 <span id="val-hue" class="val-display">210</span></label>
+                <input type="range" id="color-slider" min="0" max="360" value="210">
+            </div>
+            <div class="control-group">
+                <label>粒子渲染量级 <span id="val-count" class="val-display">25000</span></label>
+                <input type="range" id="count-slider" min="1000" max="30000" step="1000" value="25000">
+            </div>
+            <div class="control-group">
+                <label>结构密度乘数 <span id="val-density" class="val-display">1.0</span></label>
+                <input type="range" id="density-slider" min="0.3" max="3.0" step="0.1" value="1.0">
+            </div>
+
+            <hr style="border:0; border-top:1px solid rgba(255,255,255,0.08); margin:20px 0;">
+            
+            <button class="btn" id="cam-btn" style="background: rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 0.4);">
+                📷 开启手势与视觉交互
+            </button>
+            <div id="camera-status">等待授权...</div>
+        </div>
+    </div>
+    
+    <div class="fullscreen-btn" id="fullscreen-btn" title="全屏">⛶</div>
+
+    <audio id="audio-element"></audio>
+    <video id="video-element" autoplay playsinline></video>
+
+    <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <script>
+        // ================= 全局核心变量 =================
+        const MAX_PARTICLES = 30000; 
+        let currentParticleCount = 25000;
+        let densityFactor = 1.0;
+        
+        let scene, camera, renderer, controls;
+        let particles, geometry;
+        
+        let basePositions = new Float32Array(MAX_PARTICLES * 3);
+        let targetPositions = new Float32Array(MAX_PARTICLES * 3);
+        let colors = new Float32Array(MAX_PARTICLES * 3);
+        let sizes = new Float32Array(MAX_PARTICLES);
+        
+        const clock = new THREE.Clock();
+        const tempColor = new THREE.Color();
+        
+        // 音频引擎
+        let audioCtx, analyser, source;
+        const audioEl = document.getElementById('audio-element');
+        let dataArray;
+        let isPlaying = false;
+        
+        const audioData = {
+            vol: 0, low: 0, mid: 0, high: 0, 
+            sVol: 0, sLow: 0, sMid: 0, sHigh: 0 
+        };
+        
+        // --- 律动与定时器核心变量 ---
+        let prevBass = 0;
+        let beatPulse = 0; 
+        let beatFrameCooldown = 0; 
+        
+        let timeSinceLastSwitch = 0; // 核心：10秒定时器计时变量
+        const SWITCH_INTERVAL = 10.0; // 核心：固定每10秒变换
+        
+        let mathTime = 0; 
+        let currentHue = 210, targetHue = 210;
+
+        let mouse3D = new THREE.Vector3(999, 999, 999);
+        let hand3D = new THREE.Vector3(999, 999, 999);
+        let mouseHoverTime = 0;
+        let clickWaveRadius = 0; 
+        let isPinching = false;  
+        let isBoiling = false;   
+        let lastPinchPos = new THREE.Vector3();
+        let sceneBaseScale = 1.0;
+
+        // ================= 数学模型引擎 =================
+        const MathModels = {
+            "动态涟漪 (Dynamic Ripple)": (i, max, d) => {
+                const r = (i / max) * 60 * d; const theta = i * 0.8;
+                return [r * Math.cos(theta), Math.sin(r)*5, r * Math.sin(theta)];
+            },
+            "科赫曲线 (Koch Curve)": (i, max, d) => {
+                const angle = (Math.PI * 2 / 5) * (i % 5);
+                const r = (i / max) * 45 * d * (Math.random() > 0.4 ? 1 : 0.3);
+                return [r * Math.cos(angle), (Math.random()-0.5)*15*d, r * Math.sin(angle)];
+            },
+            "阿基米德螺旋线 (Archimedean Spiral)": (i, max, d) => {
+                const a = i * 0.05; const r = a * 0.3 * d;
+                return [r * Math.cos(a), (Math.random()-0.5)*20*d, r * Math.sin(a)];
+            },
+            "悬链线 (Catenary)": (i, max, d) => {
+                const x = (Math.random() - 0.5) * 100 * d; const z = (Math.random() - 0.5) * 100 * d;
+                const a = 20 * d; const y = a * Math.cosh(Math.sqrt(x*x + z*z)/a) - 40*d;
+                return [x, y*0.4, z];
+            },
+            "玫瑰曲线 (Rose Curve)": (i, max, d) => {
+                const k = 4; const theta = i * 0.01; 
+                const r = 40 * d * Math.cos(k * theta);
+                return [r * Math.cos(theta), (Math.random()-0.5)*10*d, r * Math.sin(theta)];
+            },
+            "流体冲击波 (Fluid Shockwave)": (i, max, d) => {
+                const phi = Math.acos(-1 + (2 * i) / max); const theta = Math.sqrt(max * Math.PI) * phi;
+                const r = (35 + Math.sin(phi * 8) * Math.cos(theta * 8) * 10) * d;
+                return [r * Math.cos(theta) * Math.sin(phi), r * Math.sin(theta) * Math.sin(phi), r * Math.cos(phi)];
+            },
+            "引力衰减 (Gravity Decay)": (i, max, d) => {
+                const r = (Math.pow(Math.random(), 2.5) * 50 + 5) * d;
+                const theta = Math.random() * Math.PI * 2; const phi = Math.acos((Math.random() * 2) - 1);
+                return [r * Math.sin(phi) * Math.cos(theta), r * Math.sin(phi) * Math.sin(theta), r * Math.cos(phi)];
+            },
+            "分形谐波 (Fractal Harmonic)": (i, max, d) => {
+                const x = (Math.random() - 0.5) * 80 * d; const z = (Math.random() - 0.5) * 80 * d;
+                const y = (Math.sin(x*0.1) + Math.cos(z*0.1) + Math.sin(x*0.05 + z*0.05)*2) * 5 * d;
+                return [x, y, z];
+            },
+            "流体态与晶体态 (Crystal State)": (i, max, d) => {
+                const size = Math.ceil(Math.cbrt(max)); const step = (60 / size) * d;
+                const x = i % size; const y = Math.floor(i / size) % size; const z = Math.floor(i / (size * size));
+                return [(x - size/2)*step, (y - size/2)*step, (z - size/2)*step];
+            },
+            "伯努利双扭曲线 (Bernoulli Lemniscate)": (i, max, d) => {
+                const a = (i / max) * Math.PI * 2; 
+                const scale = (45 / (Math.sin(a)**2 + 1)) * d;
+                return [scale * Math.cos(a), (Math.random()-0.5)*15*d, scale * Math.cos(a) * Math.sin(a)];
+            },
+            "二面体群对称矩阵 (Dihedral Group)": (i, max, d) => {
+                const angle = (Math.PI * 2 / 8) * (i % 8);
+                const r = Math.random() * 40 * d;
+                return [r * Math.cos(angle), (Math.random()-0.5)*30*d, r * Math.sin(angle)];
+            },
+            "利萨茹曲线 (Lissajous Curve)": (i, max, d) => {
+                const a = (i / max) * Math.PI * 100;
+                return [35 * d * Math.sin(3 * a), 35 * d * Math.sin(4 * a), 35 * d * Math.sin(5 * a)];
+            },
+            "范德波尔震荡 (Van উভয়ের Pol)": (i, max, d) => {
+                const a = i * 0.02; const r = (30 + 15 * Math.cos(a * 0.5)) * d;
+                return [r * Math.cos(a), 20 * d * Math.sin(a * 1.5), r * Math.sin(a)];
+            },
+            "卷曲噪波 (Curl Noise)": (i, max, d) => {
+                const x = (Math.random() - 0.5) * 60 * d;
+                const y = (Math.random() - 0.5) * 60 * d;
+                const z = (Math.random() - 0.5) * 60 * d;
+                return [x + Math.sin(y*0.2)*5*d, y + Math.cos(z*0.2)*5*d, z + Math.sin(x*0.2)*5*d];
+            }
+        };
+
+        const modelKeys = Object.keys(MathModels);
+        let availableModels = [...modelKeys]; // 洗牌池
+        let currentModel = "";
+
+        // 不放回的洗牌算法：彻底杜绝重复
+        function switchShape(forceShape = null) {
+            if (forceShape) {
+                currentModel = forceShape;
+            } else {
+                if (availableModels.length === 0) {
+                    availableModels = [...modelKeys]; // 当14个都展示完后，重新填满池子
+                }
+                const randIndex = Math.floor(Math.random() * availableModels.length);
+                currentModel = availableModels[randIndex];
+                availableModels.splice(randIndex, 1); // 从池子中移除已选模型
+            }
+            
+            const func = MathModels[currentModel];
+            for (let i = 0; i < MAX_PARTICLES; i++) {
+                const [x, y, z] = func(i, MAX_PARTICLES, densityFactor);
+                targetPositions[i*3] = x; targetPositions[i*3+1] = y; targetPositions[i*3+2] = z;
+            }
+            document.getElementById('model-status').innerText = `当前阵列：${currentModel}`;
+        }
+
+        // ================= Three.js 核心 =================
+        function initThree() {
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x02040a, 0.0035);
+
+            camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 1500);
+            camera.position.set(0, 45, 110);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setClearColor(0x02040a, 1);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; controls.dampingFactor = 0.05;
+            controls.autoRotate = false; 
+            controls.maxDistance = 350; controls.minDistance = 20;
+
+            geometry = new THREE.BufferGeometry();
+            switchShape(); // 初始化抽取一次
+            const initFunc = MathModels[currentModel];
+            for (let i = 0; i < MAX_PARTICLES; i++) {
+                const [x, y, z] = initFunc(i, MAX_PARTICLES, densityFactor);
+                basePositions[i*3] = x; basePositions[i*3+1] = y; basePositions[i*3+2] = z;
+                colors[i*3] = 1; colors[i*3+1] = 1; colors[i*3+2] = 1;
+                sizes[i] = Math.random(); 
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(basePositions, 3));
+            geometry.setAttribute('customColor', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+            geometry.setDrawRange(0, currentParticleCount);
+
+            const material = new THREE.ShaderMaterial({
+                uniforms: {
+                    u_time: { value: 0 },
+                    u_vol: { value: 0 },    
+                    u_mid: { value: 0 },    
+                    u_high: { value: 0 },
+                    u_beatPulse: { value: 0 }, 
+                    
+                    u_mouse3D: { value: new THREE.Vector3(999,999,999) },
+                    u_clickWave: { value: 0 }, 
+                    u_hoverAmplitide: { value: 0 }, 
+                    
+                    u_hand3D: { value: new THREE.Vector3(999,999,999) },
+                    u_isBoiling: { value: 0 } 
+                },
+                vertexShader: `
+                    attribute vec3 customColor;
+                    attribute float size; 
+                    varying vec3 vColor;
+                    
+                    uniform float u_time;
+                    uniform float u_vol;
+                    uniform float u_mid;
+                    uniform float u_high;
+                    uniform float u_beatPulse;
+                    
+                    uniform vec3 u_mouse3D;
+                    uniform float u_clickWave;
+                    uniform float u_hoverAmplitide;
+                    uniform vec3 u_hand3D;
+                    uniform float u_isBoiling;
+                    
+                    void main() {
+                        vColor = customColor;
+                        vec3 pos = position;
+                        
+                        pos *= (1.0 + u_beatPulse * 0.15);
+                        
+                        float noise = fract(sin(dot(pos, vec3(12.9898, 78.233, 45.164)) + u_time) * 43758.5453);
+                        pos += normal * (noise - 0.5) * u_high * 12.0; 
+                        
+                        float wave = sin(pos.x * 0.08 + u_time * 2.0) * cos(pos.z * 0.08 - u_time * 2.5);
+                        pos.y += wave * u_mid * 15.0;
+                        
+                        if(u_isBoiling > 0.5) {
+                            float bx = sin(u_time * 15.0 + size * 100.0) * 8.0 * (1.0 + u_vol);
+                            float by = cos(u_time * 18.0 + size * 100.0) * 8.0 * (1.0 + u_vol);
+                            float bz = sin(u_time * 12.0 + size * 100.0) * 8.0 * (1.0 + u_vol);
+                            pos += vec3(bx, by, bz);
+                        }
+
+                        float distMouse = length(pos - u_mouse3D);
+                        if(distMouse < 20.0) pos += normalize(pos - u_mouse3D) * (20.0 - distMouse) * 0.7;
+                        float distHand = length(pos - u_hand3D);
+                        if(distHand < 35.0) pos += normalize(pos - u_hand3D) * (35.0 - distHand) * 0.8;
+
+                        if(u_clickWave > 0.0 && u_clickWave < 120.0) {
+                            float waveDist = abs(distMouse - u_clickWave);
+                            if(waveDist < 6.0) pos.y += (6.0 - waveDist) * 3.0;
+                        }
+
+                        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                        gl_Position = projectionMatrix * mvPosition;
+                        
+                        float finalSize = size * 1.5 + 0.8;
+                        float beatScale = 1.0 + (u_beatPulse * 1.5);
+                        gl_PointSize = finalSize * beatScale * (1.0 + u_vol * 3.0) * (250.0 / max(-mvPosition.z, 0.1));
+                    }
+                `,
+                fragmentShader: `
+                    uniform float u_beatPulse;
+                    varying vec3 vColor;
+                    void main() {
+                        vec2 xy = gl_PointCoord.xy - vec2(0.5);
+                        float ll = length(xy);
+                        if(ll > 0.5) discard;
+                        
+                        float alpha = (0.5 - ll) * 2.0; 
+                        alpha = min(alpha, 0.35); 
+                        
+                        vec3 finalColor = mix(vColor, vec3(0.85, 0.95, 1.0), u_beatPulse * 0.85);
+                        gl_FragColor = vec4(finalColor, alpha);
+                    }
+                `,
+                blending: THREE.AdditiveBlending, depthWrite: false, transparent: true
+            });
+
+            particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        function initAudio() {
+            if(!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 512;
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+                source = audioCtx.createMediaElementSource(audioEl);
+                source.connect(analyser);
+                analyser.connect(audioCtx.destination);
+            }
+        }
+
+        window.addEventListener('mousemove', (e) => {
+            const vec = new THREE.Vector3((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1, 0.5);
+            vec.unproject(camera); vec.sub(camera.position).normalize();
+            const distance = -camera.position.z / vec.z;
+            mouse3D.copy(camera.position).add(vec.multiplyScalar(distance));
+            mouseHoverTime = 0; 
+        });
+        window.addEventListener('mousedown', () => { clickWaveRadius = 0.1; });
+
+        // ================= 主循环：强制定时换形 =================
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = Math.min(clock.getDelta(), 0.1); 
+            controls.update(); 
+            
+            mouseHoverTime += delta;
+            if(clickWaveRadius > 0) {
+                clickWaveRadius += delta * 120.0; 
+                if(clickWaveRadius > 120) clickWaveRadius = 0;
+            }
+
+            let currentTotalEnergy = 0;
+
+            if (isPlaying && analyser) {
+                analyser.getByteFrequencyData(dataArray);
+                
+                let sumVol = 0, sumLow = 0, sumMid = 0, sumHigh = 0;
+                for(let i=0; i<256; i++) {
+                    sumVol += dataArray[i];
+                    if(i < 6) sumLow += dataArray[i];               
+                    else if(i >= 6 && i < 40) sumMid += dataArray[i];    
+                    else if(i >= 120) sumHigh += dataArray[i];           
+                }
+
+                audioData.vol = (sumVol / 256) / 255;
+                audioData.low = (sumLow / 6) / 255;
+                audioData.mid = (sumMid / 34) / 255;
+                audioData.high = (sumHigh / 136) / 255;
+                
+                currentTotalEnergy = (audioData.low + audioData.mid + audioData.high) / 3.0;
+
+                // --- 1. 硬核鼓点检测 (保留，用于画面震动与闪烁) ---
+                if (beatFrameCooldown > 0) beatFrameCooldown--;
+                if (audioData.low - prevBass > 0.1 && beatFrameCooldown === 0 && audioData.low > 0.4) {
+                    beatPulse = 1.0; 
+                    beatFrameCooldown = 12; // 锁定
+                }
+                prevBass = audioData.low;
+                beatPulse *= 0.85; 
+
+                audioData.sVol += (audioData.vol - audioData.sVol) * 0.15;
+                audioData.sLow += (audioData.low - audioData.sLow) * 0.1;
+                audioData.sMid += (audioData.mid - audioData.sMid) * 0.12;
+                audioData.sHigh += (audioData.high - audioData.sHigh) * 0.2;
+                
+                scene.rotation.y += audioData.sLow * 0.02;
+
+                // --- 2. 10秒强制定时器换形 ---
+                timeSinceLastSwitch += delta;
+                if (timeSinceLastSwitch >= SWITCH_INTERVAL) {
+                    switchShape(); // 洗牌式抽取，不重复
+                    targetHue = (targetHue + 70 + Math.random() * 50) % 360; // 色彩大跨度跃迁
+                    timeSinceLastSwitch = 0; // 重置10秒计时器
+                }
+
+            } else {
+                beatPulse *= 0.85; 
+            }
+
+            mathTime += delta * (0.2 + currentTotalEnergy * 8.0);
+            currentHue = THREE.MathUtils.lerp(currentHue, targetHue, 0.05);
+
+            let morphSpeed = 0.015 + audioData.sVol * 0.06 + beatPulse * 0.05;
+            
+            const posAttr = geometry.attributes.position;
+            const colAttr = geometry.attributes.customColor;
+
+            for (let i = 0; i < currentParticleCount; i++) {
+                let ix = i * 3, iy = i * 3 + 1, iz = i * 3 + 2;
+
+                basePositions[ix] += (targetPositions[ix] - basePositions[ix]) * morphSpeed;
+                basePositions[iy] += (targetPositions[iy] - basePositions[iy]) * morphSpeed;
+                basePositions[iz] += (targetPositions[iz] - basePositions[iz]) * morphSpeed;
+
+                const dist = Math.sqrt(basePositions[ix]**2 + basePositions[iy]**2 + basePositions[iz]**2);
+                let p_hue = (currentHue + dist * 0.6) % 360;
+                tempColor.setHSL(p_hue / 360, 0.85, 0.55); 
+                colors[ix] = tempColor.r; colors[iy] = tempColor.g; colors[iz] = tempColor.b;
+            }
+
+            posAttr.needsUpdate = true; colAttr.needsUpdate = true;
+            
+            const uniforms = particles.material.uniforms;
+            uniforms.u_time.value = mathTime;
+            uniforms.u_vol.value = audioData.sVol;
+            uniforms.u_mid.value = audioData.sMid;
+            uniforms.u_high.value = audioData.sHigh;
+            uniforms.u_beatPulse.value = beatPulse; 
+            
+            uniforms.u_mouse3D.value.copy(mouse3D);
+            uniforms.u_clickWave.value = clickWaveRadius;
+            uniforms.u_hoverAmplitide.value = mouseHoverTime > 0.5 ? Math.min((mouseHoverTime - 0.5), 1.0) : 0.0;
+            uniforms.u_hand3D.value.copy(hand3D);
+            uniforms.u_isBoiling.value = isBoiling ? 1.0 : 0.0;
+            
+            renderer.render(scene, camera);
+        }
+
+        // ================= UI 绑定 =================
+        window.onload = () => { initThree(); animate(); };
+
+        document.getElementById('collapse-btn').addEventListener('click', function() {
+            const p = document.getElementById('panel-content');
+            if(p.style.display === 'none') { p.style.display = 'block'; this.innerText = '−'; }
+            else { p.style.display = 'none'; this.innerText = '+'; }
+        });
+
+        document.getElementById('upload-btn').addEventListener('click', () => {
+            if (!audioCtx) initAudio();
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+            document.getElementById('file-input').click();
+        });
+
+        document.getElementById('file-input').addEventListener('change', function() {
+            if(this.files.length > 0) {
+                audioEl.src = URL.createObjectURL(this.files[0]);
+                document.getElementById('status-text').innerText = "🎵 正在解析: " + this.files[0].name;
+                audioEl.play(); isPlaying = true; document.getElementById('play-pause-btn').innerText = "⏸";
+                
+                // 每次换歌时重置倒计时，并强制换一次新模型
+                timeSinceLastSwitch = 0; beatFrameCooldown = 0; beatPulse = 0;
+                switchShape(); targetHue = (targetHue + 120)%360;
+            }
+        });
+
+        document.getElementById('play-pause-btn').addEventListener('click', function() {
+            if(!audioCtx) initAudio();
+            if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+            if(isPlaying) { audioEl.pause(); isPlaying = false; this.innerText = "▶"; }
+            else { audioEl.play(); isPlaying = true; this.innerText = "⏸"; }
+        });
+
+        const timeCurr = document.getElementById('time-current'), timeTotal = document.getElementById('time-total'), progSlider = document.getElementById('progress-slider');
+        function fmtT(s) { let m = Math.floor(s/60), sec = Math.floor(s%60); return `${m<10?'0'+m:m}:${sec<10?'0'+sec:sec}`; }
+        audioEl.addEventListener('timeupdate', () => { if(audioEl.duration) { progSlider.value = (audioEl.currentTime/audioEl.duration)*100; timeCurr.innerText = fmtT(audioEl.currentTime); }});
+        audioEl.addEventListener('loadedmetadata', () => timeTotal.innerText = fmtT(audioEl.duration));
+        progSlider.addEventListener('input', e => { 
+            if(audioEl.duration) {
+                audioEl.currentTime = (e.target.value/100)*audioEl.duration; 
+                timeSinceLastSwitch = 0; // 手动切进度条时，重置10秒计时
+            }
+        });
+
+        document.getElementById('volume-slider').addEventListener('input', e => { audioEl.volume = e.target.value; document.getElementById('val-vol').innerText = Math.round(e.target.value*100)+'%'; });
+        document.getElementById('color-slider').addEventListener('input', e => { targetHue = parseFloat(e.target.value); document.getElementById('val-hue').innerText = e.target.value; });
+        document.getElementById('count-slider').addEventListener('input', e => {
+            currentParticleCount = parseInt(e.target.value); geometry.setDrawRange(0, currentParticleCount); 
+            document.getElementById('val-count').innerText = currentParticleCount;
+        });
+        document.getElementById('density-slider').addEventListener('input', e => {
+            densityFactor = parseFloat(e.target.value);
+            document.getElementById('val-density').innerText = densityFactor.toFixed(1);
+            switchShape(currentModel);
+        });
+        document.getElementById('fullscreen-btn').addEventListener('click', () => { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); });
+
+        // ================= AI 手势控制 =================
+        let isCamActive = false;
+        let mpCamera = null;
+        let videoStream = null;
+
+        document.getElementById('cam-btn').addEventListener('click', async function() {
+            const statusEl = document.getElementById('camera-status');
+            
+            if (isCamActive) {
+                isCamActive = false;
+                if(mpCamera) { mpCamera.stop(); mpCamera = null; }
+                if(videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+                hand3D.set(999,999,999); isPinching = false; isBoiling = false;
+                
+                statusEl.style.display = 'none';
+                this.innerHTML = "📷 开启手势与视觉交互";
+                this.style.background = "rgba(245, 158, 11, 0.2)";
+                this.style.borderColor = "rgba(245, 158, 11, 0.4)";
+                return;
+            }
+
+            try {
+                statusEl.style.display = 'block'; statusEl.innerText = "⏳ 正在加载 AI 模型...";
+                const videoEl = document.getElementById('video-element');
+                
+                const hands = new Hands({locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+                hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+                
+                hands.onResults((results) => {
+                    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                        const marks = results.multiHandLandmarks[0];
+                        const wrist = marks[0], thumb = marks[4], index = marks[8], palm = marks[9];
+                        
+                        let hx = -(palm.x - 0.5) * 150;
+                        let hy = -(palm.y - 0.5) * 150;
+                        hand3D.set(hx, hy, 0);
+
+                        const pinchDist = Math.hypot(thumb.x - index.x, thumb.y - index.y);
+                        const handSpan = Math.hypot(index.x - wrist.x, index.y - wrist.y);
+                        
+                        if (pinchDist < 0.06) {
+                            if (!isPinching) {
+                                isPinching = true;
+                                lastPinchPos.set(palm.x, palm.y, 0);
+                                sceneBaseScale = scene.scale.x;
+                            }
+                            const deltaX = palm.x - lastPinchPos.x;
+                            const deltaY = palm.y - lastPinchPos.y;
+                            scene.rotation.y += deltaX * 3.0;
+                            scene.rotation.x += deltaY * 3.0;
+                            
+                            let newScale = sceneBaseScale + (lastPinchPos.y - palm.y) * 2.0;
+                            newScale = Math.max(0.2, Math.min(newScale, 3.0));
+                            scene.scale.set(newScale, newScale, newScale);
+                            
+                            lastPinchPos.set(palm.x, palm.y, 0);
+                            statusEl.innerText = "🤏 手势控制：缩放与旋转";
+                            isBoiling = false;
+                        } else {
+                            isPinching = false;
+                            isBoiling = (handSpan > 0.45); 
+                            statusEl.innerText = isBoiling ? "🔥 强频沸腾激发" : "🤚 空间引力扰动";
+                        }
+                    } else {
+                        hand3D.set(999,999,999); isPinching = false; isBoiling = false;
+                        statusEl.innerText = "👀 等待手势接入";
+                    }
+                });
+
+                videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                videoEl.srcObject = videoStream;
+                
+                mpCamera = new Camera(videoEl, { onFrame: async () => { await hands.send({image: videoEl}); }, width: 320, height: 240 });
+                mpCamera.start();
+                
+                isCamActive = true;
+                this.innerHTML = "⏹ 关闭摄像头彻底释放";
+                this.style.background = "rgba(239, 68, 68, 0.4)";
+                this.style.borderColor = "rgba(239, 68, 68, 0.6)";
+                statusEl.innerText = "✅ AI 视觉就绪";
+            } catch (err) { statusEl.innerText = "❌ 摄像头获取失败"; console.error(err); }
+        });
+    </script>
+</body>
+</html>
